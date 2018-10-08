@@ -7,6 +7,9 @@ const mongoose = require("mongoose");
 
 const dateRegEx = /^[0-9]{4}\-(0[1-9]|1[012])\-(0[1-9]|[12][0-9]|3[01])/;
 const minRegEx = /^[0-9]*$/g;
+const htmlTagRegEx=/<[^>]+>/g;
+const alpnumRegEx=/^[a-z0-9]+$/i;
+//.replace(htmlTagRegEx, '');
 
 const maxDate = new Date(8640000000000000);
 const minDate = new Date(-8640000000000000);
@@ -55,7 +58,7 @@ app.get("/", (req, res) => {
 
 app.post("/api/exercise/new-user", function(req, res, next) {
 	let username = req.body.username;
-  if(!username)next(new Error(`Username is required.`));
+  if(username&&username.match(alpnumRegEx)){
 	User.findOne({ username }, function(err, user) {
 		if (!user) {
 			User.create({ username })
@@ -64,9 +67,10 @@ app.post("/api/exercise/new-user", function(req, res, next) {
 				)
 				.catch((e) => next(new Error(e)));
 		} else {
-			next(new Error(`User with username "${username}" already exists.`));
+			return next(new Error(`User with username "${username}" already exists.`));
 		}
 	});
+  }else return next(new Error('Username invalid'));
 });
 
 app.get("/api/exercise/users", function(req, res, next) {
@@ -82,9 +86,10 @@ app.post("/api/exercise/add", function(req, res, next) {
 	let { userId, description, duration, date } = req.body;
 	userId = userId.trim();
 	date = date.trim();
-
+  
+  if (description.match(htmlTagRegEx)) return next(new Error("HTML tags in description are not allowed."));
 	if (!(duration && userId && description))
-		next(
+		return next(
 			new Error(
 				`Required:${userId ? " " : " userId"}${
 					description ? " " : " description"
@@ -92,12 +97,12 @@ app.post("/api/exercise/add", function(req, res, next) {
 			)
 		);
 	if (!duration.match(minRegEx))
-		next(
+	return next(
 			new Error(
-				`'duration' must be a whole positive number, but is a: '${duration}'`
+				`'duration' must be a whole positive number'`
 			)
 		);
-	if (!(date.match(dateRegEx) || !date)) next(new Error("Check date format."));
+	if (!(date.match(dateRegEx) || !date)) return next(new Error("Check date format."));
 
 	date = date ? new Date(date) : new Date();
 	let exercise = { description, duration, date };
@@ -106,8 +111,8 @@ app.post("/api/exercise/add", function(req, res, next) {
 		err,
 		user
 	) {
-		if (err) next(new Error(err));
-		if (!user) next(new Error(`Could not find user with ID: '${userId}'`));
+		if (err) return next(new Error(err));
+		if (!user) return next(new Error(`Could not find user with ID.`));
 		else {
 			res.json({
 				_id: user._id,
@@ -115,7 +120,6 @@ app.post("/api/exercise/add", function(req, res, next) {
 				description,
 				duration: parseInt(duration),
 				date: date.toUTCString().slice(0, 16)
-				//				date: date.toISOString().split("T")[0];
 			});
 		}
 	});
@@ -135,7 +139,7 @@ app.get("/api/exercise/log", function(req, res, next) {
 		next(new Error("Check 'to' date format."));
 	if (!(limit === "" || limit.match(minRegEx)))
 		next(
-			new Error(`'limit' must be a whole positive number, but is a: '${limit}'`)
+			new Error(`'limit' must be a whole positive number.'`)
 		);
 
 	from = from ? new Date(from) : minDate;
